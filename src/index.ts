@@ -1,140 +1,146 @@
-// TypeRep
-export type Repr<A> =
-  | ArrayRep<A>
-  | Dict<A>
-  | PartialRep<A>
-  | RecordRep<A>
-  | Primitive<A>
-  | Literal<A>
-  | Union<A>
-  | Tuple<A>
-  | ClassRep<A>
+import { Lit } from './types';
+
+
+// Runtime representation of typescript types
+export type Type<A> =
+  | ArrayType<A>
+  | DictType<A>
+  | PartialType<A>
+  | RecordType<A>
+  | PrimitiveType<A>
+  | LiteralType<A>
+  | UnionType<A>
+  | TupleType<A>
+  | ClassType<A>
   | Annot<A>
-  ;
+;
 
 
-// Base class for instance methods
-export class ReprBase<A> {
+// Instance methods
+export class Base<A> {
   readonly _A: A;
+
+  with<B>(this: Type<A>, fn: (a: Type<A>) => B): B {
+    return fn(this);
+  }
 }
 
-export class ArrayRep<A> extends ReprBase<A> {
+export class ArrayType<A> extends Base<A> {
   constructor(
-    readonly _value: Repr<any>,
+    readonly _value: Type<any>,
   ) { super(); }
 }
 
-export class Tuple<A> extends ReprBase<A> {
+export class TupleType<A> extends Base<A> {
   constructor(
-    readonly _tuple: Repr<any>[],
+    readonly _tuple: Type<any>[],
   ) { super(); }
 }
 
-export class Dict<A> extends ReprBase<A> {
+export class DictType<A> extends Base<A> {
   constructor(
-    readonly _value: Repr<any>,
+    readonly _value: Type<any>,
   ) { super(); }
 }
 
-export class RecordRep<A> extends ReprBase<A> {
+export class RecordType<A> extends Base<A> {
   constructor(
-    readonly _record: Record<string, Repr<any>>,
+    readonly _record: Record<string, Type<any>>,
   ) { super(); }
 
-  extend<F>(fields: { [K in keyof F]: Repr<F[K]> }): RecordRep<A & F> {
-    return new RecordRep({ ...this._record, ...fields as any });
+  extend<F>(fields: { [K in keyof F]: Type<F[K]> }): RecordType<A & F> {
+    return new RecordType({ ...this._record, ...fields as any });
   }
   
-  pick<K extends keyof A>(...keys: K[]): RecordRep<Pick<A, K>> {
-    return new RecordRep(keys.reduce<any>((acc, k) => (acc[k] = this._record[k as string], acc), {}));
+  pick<K extends keyof A>(...keys: K[]): RecordType<Pick<A, K>> {
+    return new RecordType(keys.reduce<any>((acc, k) => (acc[k] = this._record[k as string], acc), {}));
   }
   
-  omit<K extends keyof A>(...keys: K[]): RecordRep<Omit<A, K>> {
+  omit<K extends keyof A>(...keys: K[]): RecordType<Omit<A, K>> {
     const description = Object.keys(this._record).reduce((acc, k) => (keys.indexOf(k as any) === -1 && (acc[k] = this._record[k]), acc), {});
-    return new RecordRep(description);
+    return new RecordType(description);
   }  
 }
 
-export class PartialRep<A> extends ReprBase<A> {
+export class PartialType<A> extends Base<A> {
   constructor(
-    readonly _record: RecordRep<any>,
+    readonly _record: RecordType<any>,
   ) { super(); }
 }
 
-export class Primitive<A> extends ReprBase<A> {
+export class PrimitiveType<A> extends Base<A> {
   constructor(
     readonly _type: 'boolean'|'string'|'number'|'any'|'unknown',
   ) { super(); }
 }
 
-export class Literal<A> extends ReprBase<A> {
+export class LiteralType<A> extends Base<A> {
   constructor(
     readonly _value: A,
   ) { super(); }
 }
 
-export class Union<A> extends ReprBase<A> {
+export class UnionType<A> extends Base<A> {
   constructor(
-    readonly _alternatives: Repr<A>[],
+    readonly _alternatives: Type<A>[],
   ) { super(); }
 }
 
-export class ClassRep<A> extends ReprBase<A> {
+export class ClassType<A> extends Base<A> {
   constructor(
-    readonly _contructorArgs: Repr<A>[],
+    readonly _class: Function,
+    readonly _contructorArgs: Type<A>[],
   ) { super(); }
 }
 
 
-export abstract class Annot<A> extends ReprBase<A> {
-  abstract toRepresentable(): Repr<A>;
+export abstract class Annot<A> extends Base<A> {
+  abstract toRepresentable(): Type<A>;
 }
 
 
-export function of<A extends Expr>(a: A): Literal<A> {
-  return new Literal(a);
+export function of<A extends Lit>(a: A): LiteralType<A> {
+  return new LiteralType(a);
 }
-
 
 // Primitives
-const anyRep = new Primitive<string>('any');
-const unknownRep = new Primitive<string>('unknown');
-const stringRep = new Primitive<string>('string');
-const booleanRep = new Primitive<boolean>('boolean');
-const numberRep = new Primitive<number>('number');
-const nullRep = new Literal<null>(null);
-const undefinedRep = new Literal<undefined>(undefined);
+const anyType = new PrimitiveType<string>('any');
+const unknownType = new PrimitiveType<string>('unknown');
+const stringType = new PrimitiveType<string>('string');
+const booleanType = new PrimitiveType<boolean>('boolean');
+const numberType = new PrimitiveType<number>('number');
+const nullType = new LiteralType<null>(null);
+const undefinedType = new LiteralType<undefined>(undefined);
 
 
 // Renamings
-export { anyRep as any, stringRep as string, booleanRep as boolean, numberRep as number, nullRep as null, undefinedRep as undefined, unknownRep as unknown };
+export { anyType as any, stringType as string, booleanType as boolean, numberType as number, nullType as null, undefinedType as undefined, unknownType as unknown };
 
 
-// TS union type
-export function union<XS extends Repr<any>[]>(...array: XS): Union<XS[number]['_A']>;
-export function union<XS extends Repr<any>[]>(array: XS): Union<XS[number]['_A']>;
-export function union(): Union<any> {
+// Union type
+export function oneOf<XS extends Type<any>[]>(...array: XS): UnionType<XS[number]['_A']>;
+export function oneOf<XS extends Type<any>[]>(array: XS): UnionType<XS[number]['_A']>;
+export function oneOf(): UnionType<any> {
   const xs = Array.isArray(arguments[0]) ? arguments[0] : Array.prototype.slice.call(arguments);
-  return new Union(xs);
+  return new UnionType(xs);
 }
 
 
-export function array<A>(decoder: Repr<A>): Repr<A[]> {
-  return new ArrayRep(decoder);
+export function array<A>(decoder: Type<A>): ArrayType<A[]> {
+  return new ArrayType(decoder);
 }
 
-export function record<T>(fields: { [K in keyof T]: Repr<T[K]> }): RecordRep<T> {
-  return new RecordRep(fields);
+export function record<T>(fields: { [K in keyof T]: Type<T[K]> }): RecordType<T> {
+  return new RecordType(fields);
 }
 
-export function dict<A>(decoder: Repr<A>): Repr<Record<string, A>> {
-  return new Dict(decoder);
+export function dict<A>(decoder: Type<A>): DictType<Record<string, A>> {
+  return new DictType(decoder);
 }
 
 // @ts-ignore
-export function tuple<T extends Repr<any>[]>(...reps: T): Tuple<{ [K in keyof T]: T[K]['_A'] }>;
-export function tuple(...args): Repr<any> {
-  return new Tuple(args);
+export function tuple<T extends Type<any>[]>(...types: T): TupleType<{ [K in keyof T]: T[K]['_A'] }> {
+  return new TupleType(types);
 }
 
 
